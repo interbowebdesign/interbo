@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Interbo
  * Description:       Basisplugin voor Interbo Webdesign.
- * Version:           0.1.0
+ * Version:           0.2.1
  * Author:            Interbo Webdesign
  * Text Domain:       interbo
  *
@@ -13,7 +13,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'INTERBO_PLUGIN_VERSION', '0.1.0' );
+define( 'INTERBO_PLUGIN_VERSION', '0.2.1' );
+
+require_once plugin_dir_path( __FILE__ ) . 'includes/class-interbo-update-checker.php';
 
 if ( is_admin() ) {
 	require_once plugin_dir_path( __FILE__ ) . 'includes/class-interbo-admin.php';
