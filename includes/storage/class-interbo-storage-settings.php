@@ -318,28 +318,61 @@ class Interbo_Storage_Settings {
 			return;
 		}
 
-		$files_bytes    = isset( $usage['files_bytes'] ) ? (int) $usage['files_bytes'] : 0;
-		$database_bytes = isset( $usage['database_bytes'] ) ? (int) $usage['database_bytes'] : 0;
-		$total_bytes    = isset( $usage['total_bytes'] ) ? (int) $usage['total_bytes'] : 0;
+		$used_bytes     = isset( $usage['total_bytes'] ) ? (int) $usage['total_bytes'] : 0;
+		$settings       = self::get_settings();
+		$limit_gb       = isset( $settings['storage_limit'] ) ? (float) $settings['storage_limit'] : 0;
+		$limit_bytes    = $limit_gb > 0 ? (int) ( $limit_gb * 1024 * 1024 * 1024 ) : 0;
+		$has_limit      = $limit_bytes > 0;
+		$remaining      = $has_limit ? max( 0, $limit_bytes - $used_bytes ) : 0;
+		$percentage     = $has_limit ? ( $used_bytes / $limit_bytes ) * 100 : 0;
+		$bar_percentage = min( 100, max( 0, $percentage ) );
+		$categories     = array(
+			'uploads_bytes'     => __( 'Uploads', 'interbo' ),
+			'plugins_bytes'     => __( 'Plugins', 'interbo' ),
+			'themes_bytes'      => __( 'Themes', 'interbo' ),
+			'other_files_bytes' => __( 'Overige WordPress-bestanden', 'interbo' ),
+			'database_bytes'    => __( 'Database', 'interbo' ),
+		);
 		?>
+		<h3><?php echo esc_html__( 'Opslagoverzicht', 'interbo' ); ?></h3>
 		<table class="widefat striped" style="max-width: 700px;">
 			<tbody>
 				<tr>
-					<th scope="row"><?php echo esc_html__( 'Bestandsgrootte', 'interbo' ); ?></th>
-					<td><?php echo esc_html( size_format( $files_bytes ) ); ?></td>
+					<th scope="row"><?php echo esc_html__( 'Gebruikt', 'interbo' ); ?></th>
+					<td><?php echo esc_html( size_format( $used_bytes ) ); ?></td>
 				</tr>
 				<tr>
-					<th scope="row"><?php echo esc_html__( 'Databasegrootte', 'interbo' ); ?></th>
-					<td><?php echo esc_html( size_format( $database_bytes ) ); ?></td>
+					<th scope="row"><?php echo esc_html__( 'Limiet', 'interbo' ); ?></th>
+					<td><?php echo $has_limit ? esc_html( size_format( $limit_bytes ) ) : esc_html__( 'Geen opslaglimiet ingesteld', 'interbo' ); ?></td>
 				</tr>
 				<tr>
-					<th scope="row"><?php echo esc_html__( 'Totaal gebruik', 'interbo' ); ?></th>
-					<td><?php echo esc_html( size_format( $total_bytes ) ); ?></td>
+					<th scope="row"><?php echo esc_html__( 'Resterend', 'interbo' ); ?></th>
+					<td><?php echo $has_limit ? esc_html( size_format( $remaining ) ) : esc_html__( 'Niet beschikbaar zonder opslaglimiet', 'interbo' ); ?></td>
+				</tr>
+				<tr>
+					<th scope="row"><?php echo esc_html__( 'Percentage gebruikt', 'interbo' ); ?></th>
+					<td><?php echo $has_limit ? esc_html( number_format_i18n( $percentage, 1 ) . '%' ) : esc_html__( 'Niet beschikbaar zonder opslaglimiet', 'interbo' ); ?></td>
 				</tr>
 				<tr>
 					<th scope="row"><?php echo esc_html__( 'Laatste scan', 'interbo' ); ?></th>
 					<td><?php echo esc_html( wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), (int) $usage['scanned_at'] ) ); ?></td>
 				</tr>
+			</tbody>
+		</table>
+		<?php if ( $has_limit ) : ?>
+			<div style="background:#f0f0f1; height:20px; margin:16px 0; max-width:700px;">
+				<div style="background:#2271b1; height:20px; width:<?php echo esc_attr( $bar_percentage ); ?>%;"></div>
+			</div>
+		<?php endif; ?>
+		<h3><?php echo esc_html__( 'Categorieën', 'interbo' ); ?></h3>
+		<table class="widefat striped" style="max-width: 700px;">
+			<tbody>
+				<?php foreach ( $categories as $key => $label ) : ?>
+					<tr>
+						<th scope="row"><?php echo esc_html( $label ); ?></th>
+						<td><?php echo esc_html( size_format( isset( $usage[ $key ] ) ? (int) $usage[ $key ] : 0 ) ); ?></td>
+					</tr>
+				<?php endforeach; ?>
 			</tbody>
 		</table>
 		<?php
