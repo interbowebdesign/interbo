@@ -29,6 +29,7 @@ class Interbo_Storage_Settings {
 	public static function init() {
 		add_action( 'admin_menu', array( __CLASS__, 'register_menu' ) );
 		add_action( 'admin_init', array( __CLASS__, 'register_settings' ) );
+		add_action( 'admin_post_interbo_storage_scan', array( __CLASS__, 'handle_scan' ) );
 	}
 
 	/**
@@ -259,9 +260,12 @@ class Interbo_Storage_Settings {
 		if ( ! current_user_can( self::CAPABILITY ) ) {
 			wp_die( esc_html__( 'Je hebt onvoldoende rechten om deze pagina te bekijken.', 'interbo' ) );
 		}
+
+		$usage = Interbo_Storage_Scanner::get_usage();
 		?>
 		<div class="wrap">
 			<h1><?php echo esc_html__( 'Opslag', 'interbo' ); ?></h1>
+			<?php self::render_scan_notice(); ?>
 			<form action="options.php" method="post">
 				<?php
 				settings_fields( 'interbo_storage_options' );
@@ -269,7 +273,96 @@ class Interbo_Storage_Settings {
 				submit_button();
 				?>
 			</form>
+			<hr />
+			<h2><?php echo esc_html__( 'Opslaggebruik', 'interbo' ); ?></h2>
+			<?php self::render_usage( $usage ); ?>
+			<form action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" method="post">
+				<?php wp_nonce_field( 'interbo_storage_scan' ); ?>
+				<input type="hidden" name="action" value="interbo_storage_scan" />
+				<?php submit_button( __( 'Opslag opnieuw berekenen', 'interbo' ), 'secondary', 'submit', false ); ?>
+			</form>
 		</div>
 		<?php
+	}
+
+	/**
+	 * Handles a manually requested storage scan.
+	 */
+	public static function handle_scan() {
+		if ( ! current_user_can( self::CAPABILITY ) ) {
+			wp_die( esc_html__( 'Je hebt onvoldoende rechten om deze actie uit te voeren.', 'interbo' ) );
+		}
+
+		check_admin_referer( 'interbo_storage_scan' );
+		$result = Interbo_Storage_Scanner::scan_and_save();
+		$args   = array( 'page' => 'interbo-storage' );
+
+		if ( ! empty( $result['success'] ) ) {
+			$args['interbo_scan'] = 'success';
+		} else {
+			$args['interbo_scan'] = 'error';
+		}
+
+		wp_safe_redirect( add_query_arg( $args, admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	/**
+	 * Renders the result of the last storage scan.
+	 *
+	 * @param mixed $usage Stored usage result.
+	 */
+	private static function render_usage( $usage ) {
+		if ( ! is_array( $usage ) || empty( $usage['scanned_at'] ) ) {
+			echo '<p>' . esc_html__( 'Er is nog geen opslagscan uitgevoerd.', 'interbo' ) . '</p>';
+			return;
+		}
+
+		$files_bytes    = isset( $usage['files_bytes'] ) ? (int) $usage['files_bytes'] : 0;
+		$database_bytes = isset( $usage['database_bytes'] ) ? (int) $usage['database_bytes'] : 0;
+		$total_bytes    = isset( $usage['total_bytes'] ) ? (int) $usage['total_bytes'] : 0;
+		?>
+		<table class="widefat striped" style="max-width: 700px;">
+			<tbody>
+				<tr>
+					<th scope="row"><?php echo esc_html__( 'Bestandsgrootte', 'interbo' ); ?></th>
+					<td><?php echo esc_html( size_format( $files_bytes ) ); ?></td>
+				</tr>
+				<tr>
+					<th scope="row"><?php echo esc_html__( 'Databasegrootte', 'interbo' ); ?></th>
+					<td><?php echo esc_html( size_format( $database_bytes ) ); ?></td>
+				</tr>
+				<tr>
+					<th scope="row"><?php echo esc_html__( 'Totaal gebruik', 'interbo' ); ?></th>
+					<td><?php echo esc_html( size_format( $total_bytes ) ); ?></td>
+				</tr>
+				<tr>
+					<th scope="row"><?php echo esc_html__( 'Laatste scan', 'interbo' ); ?></th>
+					<td><?php echo esc_html( wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), (int) $usage['scanned_at'] ) ); ?></td>
+				</tr>
+			</tbody>
+		</table>
+		<?php
+		if ( ! empty( $usage['scan_status'] ) && 'complete' !== $usage['scan_status'] ) {
+			echo '<p class="description">' . esc_html__( 'De scan is gedeeltelijk uitgevoerd omdat niet alle bestanden of mappen konden worden gelezen.', 'interbo' ) . '</p>';
+		}
+	}
+
+	/**
+	 * Renders an admin notice after a scan redirect.
+	 */
+	private static function render_scan_notice() {
+		if ( empty( $_GET['interbo_scan'] ) ) {
+			return;
+		}
+
+		$status = sanitize_key( wp_unslash( $_GET['interbo_scan'] ) );
+		if ( 'success' === $status ) {
+			add_settings_error( self::OPTION_KEY, 'interbo_scan_success', __( 'De opslag is opnieuw berekend.', 'interbo' ), 'updated' );
+		} elseif ( 'error' === $status ) {
+			add_settings_error( self::OPTION_KEY, 'interbo_scan_error', __( 'De opslag kon niet volledig worden berekend.', 'interbo' ), 'error' );
+		}
+
+		settings_errors( self::OPTION_KEY );
 	}
 }
