@@ -14,6 +14,21 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class Interbo_Storage_Scanner {
 	/**
+	 * Quota threshold at which usage becomes a warning.
+	 */
+	const WARNING_THRESHOLD = 80;
+
+	/**
+	 * Quota threshold at which usage becomes critical.
+	 */
+	const CRITICAL_THRESHOLD = 90;
+
+	/**
+	 * Quota threshold at which usage is exceeded.
+	 */
+	const EXCEEDED_THRESHOLD = 100;
+
+	/**
 	 * Option key for the last storage scan result.
 	 */
 	const USAGE_OPTION_KEY = 'interbo_storage_usage';
@@ -79,6 +94,58 @@ class Interbo_Storage_Scanner {
 		$usage = get_option( self::USAGE_OPTION_KEY, false );
 
 		return is_array( $usage ) ? $usage : false;
+	}
+
+	/**
+	 * Calculates the current storage quota status from usage and settings.
+	 *
+	 * @return array{status: string, used_bytes: int|null, limit_bytes: int|null, remaining_bytes: int|null, percentage: float|null}
+	 */
+	public static function get_quota_status() {
+		$usage = self::get_usage();
+		if ( ! is_array( $usage ) || ! isset( $usage['total_bytes'] ) || ! is_numeric( $usage['total_bytes'] ) ) {
+			return array(
+				'status'          => 'no_data',
+				'used_bytes'      => null,
+				'limit_bytes'     => null,
+				'remaining_bytes' => null,
+				'percentage'      => null,
+			);
+		}
+
+		$used_bytes = max( 0, (int) $usage['total_bytes'] );
+		$settings   = get_option( 'interbo_storage_settings', array() );
+		$limit_gb   = is_array( $settings ) && isset( $settings['storage_limit'] ) && is_numeric( $settings['storage_limit'] ) ? (float) $settings['storage_limit'] : 0;
+
+		if ( $limit_gb <= 0 ) {
+			return array(
+				'status'          => 'no_limit',
+				'used_bytes'      => $used_bytes,
+				'limit_bytes'     => null,
+				'remaining_bytes' => null,
+				'percentage'      => null,
+			);
+		}
+
+		$limit_bytes = max( 1, (int) round( $limit_gb * 1024 * 1024 * 1024 ) );
+		$percentage  = ( $used_bytes / $limit_bytes ) * 100;
+		$status      = 'normal';
+
+		if ( $used_bytes * 100 >= $limit_bytes * self::EXCEEDED_THRESHOLD ) {
+			$status = 'exceeded';
+		} elseif ( $used_bytes * 100 >= $limit_bytes * self::CRITICAL_THRESHOLD ) {
+			$status = 'critical';
+		} elseif ( $used_bytes * 100 >= $limit_bytes * self::WARNING_THRESHOLD ) {
+			$status = 'warning';
+		}
+
+		return array(
+			'status'          => $status,
+			'used_bytes'      => $used_bytes,
+			'limit_bytes'     => $limit_bytes,
+			'remaining_bytes' => max( 0, $limit_bytes - $used_bytes ),
+			'percentage'      => $percentage,
+		);
 	}
 
 	/**
