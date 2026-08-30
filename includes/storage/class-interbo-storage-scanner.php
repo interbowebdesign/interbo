@@ -43,11 +43,15 @@ class Interbo_Storage_Scanner {
 		}
 
 		$usage = array(
-			'files_bytes'    => (int) $file_result['bytes'],
-			'database_bytes' => (int) $database_result['bytes'],
-			'total_bytes'    => (int) $file_result['bytes'] + (int) $database_result['bytes'],
-			'scanned_at'     => time(),
-			'scan_status'    => ! empty( $file_result['complete'] ) ? 'complete' : 'partial',
+			'files_bytes'       => (int) $file_result['files_bytes'],
+			'uploads_bytes'     => (int) $file_result['uploads_bytes'],
+			'plugins_bytes'     => (int) $file_result['plugins_bytes'],
+			'themes_bytes'      => (int) $file_result['themes_bytes'],
+			'other_files_bytes' => (int) $file_result['other_files_bytes'],
+			'database_bytes'    => (int) $database_result['bytes'],
+			'total_bytes'       => (int) $file_result['files_bytes'] + (int) $database_result['bytes'],
+			'scanned_at'        => time(),
+			'scan_status'       => ! empty( $file_result['complete'] ) ? 'complete' : 'partial',
 		);
 
 		$updated = update_option( self::USAGE_OPTION_KEY, $usage, false );
@@ -80,7 +84,7 @@ class Interbo_Storage_Scanner {
 	/**
 	 * Measures every regular file below the WordPress root without following symlinks.
 	 *
-	 * @return array{success: bool, bytes: int, complete: bool, error: string|null}
+	 * @return array{success: bool, files_bytes: int, uploads_bytes: int, plugins_bytes: int, themes_bytes: int, other_files_bytes: int, complete: bool, error: string|null}
 	 */
 	private static function measure_files() {
 		$root = rtrim( ABSPATH, DIRECTORY_SEPARATOR );
@@ -93,9 +97,16 @@ class Interbo_Storage_Scanner {
 			);
 		}
 
-		$directories = array( $root );
-		$bytes       = 0;
-		$complete    = true;
+		$category_paths = self::get_category_paths();
+		$directories    = array( $root );
+		$files_bytes    = 0;
+		$category_bytes = array(
+			'uploads_bytes'     => 0,
+			'plugins_bytes'     => 0,
+			'themes_bytes'      => 0,
+			'other_files_bytes' => 0,
+		);
+		$complete = true;
 
 		while ( ! empty( $directories ) ) {
 			$directory = array_pop( $directories );
@@ -106,10 +117,14 @@ class Interbo_Storage_Scanner {
 			} catch ( Throwable $exception ) {
 				if ( $is_root ) {
 					return array(
-						'success'  => false,
-						'bytes'    => 0,
-						'complete' => false,
-						'error'    => __( 'De WordPress-root kon niet worden geopend.', 'interbo' ),
+						'success'           => false,
+						'files_bytes'       => 0,
+						'uploads_bytes'     => 0,
+						'plugins_bytes'     => 0,
+						'themes_bytes'      => 0,
+						'other_files_bytes' => 0,
+						'complete'          => false,
+						'error'             => __( 'De WordPress-root kon niet worden geopend.', 'interbo' ),
 					);
 				}
 
@@ -138,7 +153,12 @@ class Interbo_Storage_Scanner {
 								continue;
 							}
 
-							$bytes += (int) $file_size;
+							$file_size = (int) $file_size;
+							$file_path = wp_normalize_path( $path );
+							$category  = self::get_file_category( $file_path, $category_paths );
+
+							$files_bytes                += $file_size;
+							$category_bytes[ $category ] += $file_size;
 						}
 					} catch ( Throwable $exception ) {
 						$complete = false;
@@ -147,10 +167,14 @@ class Interbo_Storage_Scanner {
 			} catch ( Throwable $exception ) {
 				if ( $is_root ) {
 					return array(
-						'success'  => false,
-						'bytes'    => 0,
-						'complete' => false,
-						'error'    => __( 'De WordPress-root kon niet volledig worden gelezen.', 'interbo' ),
+						'success'           => false,
+						'files_bytes'       => 0,
+						'uploads_bytes'     => 0,
+						'plugins_bytes'     => 0,
+						'themes_bytes'      => 0,
+						'other_files_bytes' => 0,
+						'complete'          => false,
+						'error'             => __( 'De WordPress-root kon niet volledig worden gelezen.', 'interbo' ),
 					);
 				}
 
@@ -159,11 +183,54 @@ class Interbo_Storage_Scanner {
 		}
 
 		return array(
-			'success'  => true,
-			'bytes'    => $bytes,
-			'complete' => $complete,
-			'error'    => null,
+			'success'           => true,
+			'files_bytes'       => $files_bytes,
+			'uploads_bytes'     => $category_bytes['uploads_bytes'],
+			'plugins_bytes'     => $category_bytes['plugins_bytes'],
+			'themes_bytes'      => $category_bytes['themes_bytes'],
+			'other_files_bytes' => $category_bytes['other_files_bytes'],
+			'complete'          => $complete,
+			'error'             => null,
 		);
+	}
+
+	/**
+	 * Returns normalized category directories.
+	 *
+	 * @return array<string, string>
+	 */
+	private static function get_category_paths() {
+		$upload_dir      = function_exists( 'wp_get_upload_dir' ) ? wp_get_upload_dir() : array();
+		$uploads_basedir = is_array( $upload_dir ) && ! empty( $upload_dir['basedir'] ) && is_string( $upload_dir['basedir'] ) ? $upload_dir['basedir'] : '';
+		$paths = array(
+			'uploads_bytes' => $uploads_basedir,
+			'plugins_bytes' => defined( 'WP_PLUGIN_DIR' ) ? WP_PLUGIN_DIR : '',
+			'themes_bytes'  => function_exists( 'get_theme_root' ) ? get_theme_root() : '',
+		);
+
+		foreach ( $paths as $key => $path ) {
+			$path = is_string( $path ) ? trim( $path ) : '';
+			$paths[ $key ] = '' !== $path ? trailingslashit( wp_normalize_path( $path ) ) : '';
+		}
+
+		return $paths;
+	}
+
+	/**
+	 * Returns the category for a normalized file path.
+	 *
+	 * @param string                $file_path      Normalized file path.
+	 * @param array<string, string> $category_paths Normalized category paths.
+	 * @return string
+	 */
+	private static function get_file_category( $file_path, $category_paths ) {
+		foreach ( array( 'uploads_bytes', 'plugins_bytes', 'themes_bytes' ) as $category ) {
+			if ( '' !== $category_paths[ $category ] && 0 === strpos( $file_path, $category_paths[ $category ] ) ) {
+				return $category;
+			}
+		}
+
+		return 'other_files_bytes';
 	}
 
 	/**
