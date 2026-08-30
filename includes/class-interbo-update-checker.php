@@ -107,15 +107,18 @@ class Interbo_Update_Checker {
 			return $value;
 		}
 
-		$value->response[ $plugin_basename ] = (object) array(
-			'slug'          => 'interbo',
-			'plugin'        => $plugin_basename,
-			'new_version'   => $status['github_version'],
-			'url'           => 'https://github.com/interbowebdesign/interbo',
-			'package'       => '',
-			'tested'        => '',
-			'requires_php'  => '',
+		$update_data = array(
+			'slug'        => 'interbo',
+			'plugin'      => $plugin_basename,
+			'new_version' => $status['github_version'],
+			'url'         => 'https://github.com/interbowebdesign/interbo',
 		);
+
+		if ( ! empty( $status['package_url'] ) ) {
+			$update_data['package'] = $status['package_url'];
+		}
+
+		$value->response[ $plugin_basename ] = (object) $update_data;
 
 		return $value;
 	}
@@ -141,6 +144,7 @@ class Interbo_Update_Checker {
 	 *   current_version: string|null,
 	 *   github_version: string|null,
 	 *   github_tag: string|null,
+	 *   package_url: string|null,
 	 *   message: string|null,
 	 *   update_available: bool
 	 * }
@@ -176,6 +180,7 @@ class Interbo_Update_Checker {
 	 *   current_version: string|null,
 	 *   github_version: string|null,
 	 *   github_tag: string|null,
+	 *   package_url: string|null,
 	 *   message: string|null,
 	 *   update_available: bool
 	 * }
@@ -198,6 +203,7 @@ class Interbo_Update_Checker {
 				'current_version' => self::normalize_version( INTERBO_PLUGIN_VERSION ),
 				'github_version'  => null,
 				'github_tag'      => null,
+				'package_url'     => null,
 				'message'         => $response->get_error_message(),
 				'update_available' => false,
 			);
@@ -210,6 +216,7 @@ class Interbo_Update_Checker {
 				'current_version' => self::normalize_version( INTERBO_PLUGIN_VERSION ),
 				'github_version'  => null,
 				'github_tag'      => null,
+				'package_url'     => null,
 				'message'         => sprintf( 'Unexpected GitHub HTTP status: %d.', absint( $status_code ) ),
 				'update_available' => false,
 			);
@@ -222,6 +229,7 @@ class Interbo_Update_Checker {
 				'current_version' => self::normalize_version( INTERBO_PLUGIN_VERSION ),
 				'github_version'  => null,
 				'github_tag'      => null,
+				'package_url'     => null,
 				'message'         => 'GitHub API response body is empty.',
 				'update_available' => false,
 			);
@@ -234,6 +242,7 @@ class Interbo_Update_Checker {
 				'current_version' => self::normalize_version( INTERBO_PLUGIN_VERSION ),
 				'github_version'  => null,
 				'github_tag'      => null,
+				'package_url'     => null,
 				'message'         => 'GitHub API response was not valid JSON.',
 				'update_available' => false,
 			);
@@ -246,6 +255,7 @@ class Interbo_Update_Checker {
 				'current_version' => self::normalize_version( INTERBO_PLUGIN_VERSION ),
 				'github_version'  => null,
 				'github_tag'      => null,
+				'package_url'     => null,
 				'message'         => 'GitHub release is missing a valid tag_name.',
 				'update_available' => false,
 			);
@@ -258,6 +268,7 @@ class Interbo_Update_Checker {
 				'current_version' => self::normalize_version( INTERBO_PLUGIN_VERSION ),
 				'github_version'  => null,
 				'github_tag'      => $tag_name,
+				'package_url'     => null,
 				'message'         => 'GitHub release tag is in an unexpected format.',
 				'update_available' => false,
 			);
@@ -270,11 +281,13 @@ class Interbo_Update_Checker {
 				'current_version' => null,
 				'github_version'  => $github_version,
 				'github_tag'      => $tag_name,
+				'package_url'     => null,
 				'message'         => 'Local plugin version is invalid.',
 				'update_available' => false,
 			);
 		}
 
+		$package_url = self::find_release_asset_url( $data );
 		$update_available = version_compare( $current_version, $github_version, '<' );
 
 		return array(
@@ -282,9 +295,45 @@ class Interbo_Update_Checker {
 			'current_version' => $current_version,
 			'github_version'  => $github_version,
 			'github_tag'      => $tag_name,
+			'package_url'     => $package_url,
 			'message'         => null,
 			'update_available' => $update_available,
 		);
+	}
+
+	/**
+	 * Finds the public interbo.zip release asset in the GitHub release payload.
+	 *
+	 * @param object $release_data Decoded GitHub release payload.
+	 * @return string|null
+	 */
+	private static function find_release_asset_url( $release_data ) {
+		if ( ! is_object( $release_data ) || ! isset( $release_data->assets ) || ! is_array( $release_data->assets ) ) {
+			return null;
+		}
+
+		foreach ( $release_data->assets as $asset ) {
+			if ( ! is_object( $asset ) && ! is_array( $asset ) ) {
+				continue;
+			}
+
+			$asset_name = is_object( $asset ) ? ( isset( $asset->name ) ? $asset->name : '' ) : ( isset( $asset['name'] ) ? $asset['name'] : '' );
+			if ( 'interbo.zip' !== $asset_name ) {
+				continue;
+			}
+
+			$download_url = is_object( $asset ) ? ( isset( $asset->browser_download_url ) ? $asset->browser_download_url : '' ) : ( isset( $asset['browser_download_url'] ) ? $asset['browser_download_url'] : '' );
+			if ( ! is_string( $download_url ) ) {
+				continue;
+			}
+
+			$download_url = esc_url_raw( $download_url );
+			if ( ! empty( $download_url ) && wp_http_validate_url( $download_url ) ) {
+				return $download_url;
+			}
+		}
+
+		return null;
 	}
 
 	/**
@@ -333,9 +382,18 @@ class Interbo_Update_Checker {
 				'current_version' => self::normalize_version( INTERBO_PLUGIN_VERSION ),
 				'github_version'  => null,
 				'github_tag'      => null,
+				'package_url'     => null,
 				'message'         => 'GitHub release result is invalid.',
 				'update_available' => false,
 			);
+		}
+
+		$package_url = null;
+		if ( isset( $result['package_url'] ) && is_string( $result['package_url'] ) ) {
+			$sanitized_package_url = esc_url_raw( $result['package_url'] );
+			if ( ! empty( $sanitized_package_url ) && wp_http_validate_url( $sanitized_package_url ) ) {
+				$package_url = $sanitized_package_url;
+			}
 		}
 
 		return array(
@@ -343,6 +401,7 @@ class Interbo_Update_Checker {
 			'current_version' => isset( $result['current_version'] ) ? self::normalize_version( $result['current_version'] ) : self::normalize_version( INTERBO_PLUGIN_VERSION ),
 			'github_version'  => isset( $result['github_version'] ) ? self::normalize_version( $result['github_version'] ) : null,
 			'github_tag'      => isset( $result['github_tag'] ) ? sanitize_text_field( $result['github_tag'] ) : null,
+			'package_url'     => $package_url,
 			'message'         => isset( $result['message'] ) ? sanitize_text_field( $result['message'] ) : null,
 			'update_available' => ! empty( $result['update_available'] ),
 		);
