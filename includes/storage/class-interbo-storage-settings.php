@@ -313,20 +313,39 @@ class Interbo_Storage_Settings {
 	 * @param mixed $usage Stored usage result.
 	 */
 	private static function render_usage( $usage ) {
-		if ( ! is_array( $usage ) || empty( $usage['scanned_at'] ) ) {
+		$usage          = is_array( $usage ) ? $usage : array();
+		$quota_status   = Interbo_Storage_Scanner::get_quota_status();
+		$used_bytes     = isset( $quota_status['used_bytes'] ) ? (int) $quota_status['used_bytes'] : 0;
+		$limit_bytes    = isset( $quota_status['limit_bytes'] ) ? (int) $quota_status['limit_bytes'] : 0;
+		$remaining      = isset( $quota_status['remaining_bytes'] ) ? (int) $quota_status['remaining_bytes'] : 0;
+		$percentage     = isset( $quota_status['percentage'] ) ? (float) $quota_status['percentage'] : null;
+		$status         = isset( $quota_status['status'] ) ? $quota_status['status'] : 'no_data';
+		$status_labels  = array(
+			'normal'   => __( 'Normaal', 'interbo' ),
+			'warning'  => __( 'Waarschuwing', 'interbo' ),
+			'critical' => __( 'Kritiek', 'interbo' ),
+			'exceeded' => __( 'Opslaglimiet overschreden', 'interbo' ),
+			'no_limit' => __( 'Geen opslaglimiet ingesteld', 'interbo' ),
+			'no_data'  => __( 'Nog geen opslagscan uitgevoerd', 'interbo' ),
+		);
+		$status_colors = array(
+			'normal'   => '#008a20',
+			'warning'  => '#996800',
+			'critical' => '#b32d00',
+			'exceeded' => '#d63638',
+			'no_limit' => '#50575e',
+			'no_data'  => '#50575e',
+		);
+		if ( 'no_data' === $status ) {
 			echo '<p>' . esc_html__( 'Er is nog geen opslagscan uitgevoerd.', 'interbo' ) . '</p>';
 			return;
 		}
 
-		$used_bytes     = isset( $usage['total_bytes'] ) ? (int) $usage['total_bytes'] : 0;
-		$settings       = self::get_settings();
-		$limit_gb       = isset( $settings['storage_limit'] ) ? (float) $settings['storage_limit'] : 0;
-		$limit_bytes    = $limit_gb > 0 ? (int) ( $limit_gb * 1024 * 1024 * 1024 ) : 0;
-		$has_limit      = $limit_bytes > 0;
-		$remaining      = $has_limit ? max( 0, $limit_bytes - $used_bytes ) : 0;
-		$percentage     = $has_limit ? ( $used_bytes / $limit_bytes ) * 100 : 0;
-		$bar_percentage = min( 100, max( 0, $percentage ) );
-		$categories     = array(
+		$status_label  = isset( $status_labels[ $status ] ) ? $status_labels[ $status ] : $status_labels['no_data'];
+		$status_color  = isset( $status_colors[ $status ] ) ? $status_colors[ $status ] : $status_colors['no_data'];
+		$has_limit     = in_array( $status, array( 'normal', 'warning', 'critical', 'exceeded' ), true );
+		$bar_percentage = $has_limit ? min( 100, max( 0, $percentage ) ) : 0;
+		$categories    = array(
 			'uploads_bytes'     => __( 'Uploads', 'interbo' ),
 			'plugins_bytes'     => __( 'Plugins', 'interbo' ),
 			'themes_bytes'      => __( 'Themes', 'interbo' ),
@@ -354,14 +373,18 @@ class Interbo_Storage_Settings {
 					<td><?php echo $has_limit ? esc_html( number_format_i18n( $percentage, 1 ) . '%' ) : esc_html__( 'Niet beschikbaar zonder opslaglimiet', 'interbo' ); ?></td>
 				</tr>
 				<tr>
+					<th scope="row"><?php echo esc_html__( 'Status', 'interbo' ); ?></th>
+					<td><strong style="color:<?php echo esc_attr( $status_color ); ?>;"> <?php echo esc_html( $status_label ); ?></strong></td>
+				</tr>
+				<tr>
 					<th scope="row"><?php echo esc_html__( 'Laatste scan', 'interbo' ); ?></th>
-					<td><?php echo esc_html( wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), (int) $usage['scanned_at'] ) ); ?></td>
+					<td><?php echo ! empty( $usage['scanned_at'] ) ? esc_html( wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), (int) $usage['scanned_at'] ) ) : esc_html__( 'Nog niet beschikbaar', 'interbo' ); ?></td>
 				</tr>
 			</tbody>
 		</table>
 		<?php if ( $has_limit ) : ?>
 			<div style="background:#f0f0f1; height:20px; margin:16px 0; max-width:700px;">
-				<div style="background:#2271b1; height:20px; width:<?php echo esc_attr( $bar_percentage ); ?>%;"></div>
+				<div style="background:<?php echo esc_attr( $status_color ); ?>; height:20px; width:<?php echo esc_attr( $bar_percentage ); ?>%;"></div>
 			</div>
 		<?php endif; ?>
 		<h3><?php echo esc_html__( 'Categorieën', 'interbo' ); ?></h3>
