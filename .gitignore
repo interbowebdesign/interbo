@@ -9,3 +9,7 @@ Thumbs.db
 # Temporary files
 *.log
 *.tmp
+
+# Release build artifacts
+/build/
+/interbo.zip

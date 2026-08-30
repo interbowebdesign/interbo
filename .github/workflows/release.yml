@@ -1,0 +1,33 @@
+name: Build and publish release asset
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create plugin archive
+        run: |
+          set -e
+          rm -rf build
+          mkdir -p build/interbo/includes
+          cp interbo.php build/interbo/interbo.php
+          cp -R includes/. build/interbo/includes/
+          cd build
+          zip -r ../interbo.zip interbo
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: interbo.zip
+          generate_release_notes: false
