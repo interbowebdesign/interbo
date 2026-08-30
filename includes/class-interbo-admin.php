@@ -42,6 +42,15 @@ class Interbo_Admin {
 			array( __CLASS__, 'render_page' ),
 			'dashicons-admin-generic'
 		);
+
+		add_submenu_page(
+			self::MENU_SLUG,
+			__( 'Overzicht', 'interbo' ),
+			__( 'Overzicht', 'interbo' ),
+			self::CAPABILITY,
+			self::MENU_SLUG,
+			array( __CLASS__, 'render_page' )
+		);
 	}
 
 	/**
