@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Interbo
  * Description:       Basisplugin voor Interbo Webdesign.
- * Version:           0.3.6
+ * Version:           0.3.7
  * Author:            Interbo Webdesign
  * Text Domain:       interbo
  *
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'INTERBO_PLUGIN_VERSION', '0.3.6' );
+define( 'INTERBO_PLUGIN_VERSION', '0.3.7' );
 define( 'INTERBO_NOTIFICATION_EMAIL', 'info@interbo.nl' );
 define( 'INTERBO_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
 
