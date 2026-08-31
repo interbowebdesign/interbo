@@ -30,6 +30,8 @@ class Interbo_Storage_Settings {
 		add_action( 'admin_menu', array( __CLASS__, 'register_menu' ) );
 		add_action( 'admin_init', array( __CLASS__, 'register_settings' ) );
 		add_action( 'admin_post_interbo_storage_scan', array( __CLASS__, 'handle_scan' ) );
+		add_action( 'update_option_' . self::OPTION_KEY, array( __CLASS__, 'handle_settings_updated' ), 10, 3 );
+		add_action( 'added_option', array( __CLASS__, 'handle_option_added' ), 10, 2 );
 	}
 
 	/**
@@ -299,12 +301,59 @@ class Interbo_Storage_Settings {
 
 		if ( ! empty( $result['success'] ) ) {
 			$args['interbo_scan'] = 'success';
+			$notification = Interbo_Storage_Notifier::process_status_change();
+			if ( empty( $notification['success'] ) ) {
+				$args['interbo_notification'] = 'error';
+			}
 		} else {
 			$args['interbo_scan'] = 'error';
 		}
 
 		wp_safe_redirect( add_query_arg( $args, admin_url( 'admin.php' ) ) );
 		exit;
+	}
+
+	/**
+	 * Processes a storage settings update when the storage limit changed.
+	 *
+	 * @param mixed  $old_value Previous option value.
+	 * @param mixed  $value New option value.
+	 * @param string $option Option name.
+	 */
+	public static function handle_settings_updated( $old_value, $value, $option ) {
+		if ( self::storage_limit_value( $old_value ) === self::storage_limit_value( $value ) ) {
+			return;
+		}
+
+		Interbo_Storage_Notifier::process_status_change();
+	}
+
+	/**
+	 * Processes a newly created storage settings option when it contains a limit.
+	 *
+	 * @param string $option Option name.
+	 * @param mixed  $value New option value.
+	 */
+	public static function handle_option_added( $option, $value ) {
+		if ( self::OPTION_KEY !== $option || '' === self::storage_limit_value( $value ) ) {
+			return;
+		}
+
+		Interbo_Storage_Notifier::process_status_change();
+	}
+
+	/**
+	 * Returns a normalized storage limit value for change detection.
+	 *
+	 * @param mixed $settings Storage settings.
+	 * @return string
+	 */
+	private static function storage_limit_value( $settings ) {
+		if ( ! is_array( $settings ) || ! isset( $settings['storage_limit'] ) ) {
+			return '';
+		}
+
+		return (string) (float) $settings['storage_limit'];
 	}
 
 	/**
@@ -417,6 +466,10 @@ class Interbo_Storage_Settings {
 			add_settings_error( self::OPTION_KEY, 'interbo_scan_success', __( 'De opslag is opnieuw berekend.', 'interbo' ), 'updated' );
 		} elseif ( 'error' === $status ) {
 			add_settings_error( self::OPTION_KEY, 'interbo_scan_error', __( 'De opslag kon niet volledig worden berekend.', 'interbo' ), 'error' );
+		}
+
+		if ( ! empty( $_GET['interbo_notification'] ) && 'error' === sanitize_key( wp_unslash( $_GET['interbo_notification'] ) ) ) {
+			add_settings_error( self::OPTION_KEY, 'interbo_notification_error', __( 'De opslag is bijgewerkt, maar de opslagnotificatie kon niet worden verzonden.', 'interbo' ), 'error' );
 		}
 
 		settings_errors( self::OPTION_KEY );
