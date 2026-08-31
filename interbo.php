@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Interbo
  * Description:       Basisplugin voor Interbo Webdesign.
- * Version:           0.3.5
+ * Version:           0.3.6
  * Author:            Interbo Webdesign
  * Text Domain:       interbo
  *
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'INTERBO_PLUGIN_VERSION', '0.3.5' );
+define( 'INTERBO_PLUGIN_VERSION', '0.3.6' );
 define( 'INTERBO_NOTIFICATION_EMAIL', 'info@interbo.nl' );
 define( 'INTERBO_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
 
@@ -21,8 +21,10 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/class-interbo-update-checke
 require_once plugin_dir_path( __FILE__ ) . 'includes/storage/class-interbo-storage-scanner.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/storage/class-interbo-storage-notifier.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/storage/class-interbo-storage-upload-quota.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/storage/class-interbo-storage-cron.php';
 Interbo_Update_Checker::init();
 Interbo_Storage_Upload_Quota::init();
+Interbo_Storage_Cron::init();
 
 if ( is_admin() ) {
 	require_once plugin_dir_path( __FILE__ ) . 'includes/class-interbo-admin.php';
@@ -31,3 +33,6 @@ if ( is_admin() ) {
 	Interbo_Admin::init();
 	Interbo_Storage_Settings::init();
 }
+
+register_activation_hook( __FILE__, array( 'Interbo_Storage_Cron', 'schedule' ) );
+register_deactivation_hook( __FILE__, array( 'Interbo_Storage_Cron', 'unschedule' ) );
